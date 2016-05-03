@@ -38,6 +38,8 @@ def main():
     
     sma_fast = feedofcsv.Wmavrg(200)
     sma_fast_data = []
+    sma_ff = feedofcsv.Wmavrg(5)
+    sma_ff_data = []
 
     #sma_slow = feedofcsv.Mavrg(500)
     #sma_slow_data = []
@@ -66,7 +68,7 @@ def main():
     rsi_avg_data = []
     
     try:
-        pfile = open("EURUSD 5.pickle",'r')
+        pfile = open("EURUSD5.pickle",'r')
         
         (
                     x,
@@ -78,6 +80,7 @@ def main():
                     rate_data,
                     rate_slow_data,
                     sma_fast_data,
+                    sma_ff_data,
                     sma_ppsec_data,
                     bollinger_data,
                     marker_data,
@@ -103,11 +106,11 @@ def main():
                 print cnt, datetime
             
             #skip until this tick 
-            if cnt < 160000:
-                continue
+            #if cnt < 70000:
+            #    continue
             #stop after this tick 
-            if cnt >= 200000:
-                break
+            #if cnt >= 200000:
+            #    break
      
             x.append(secm)
             ybid.append(bid)
@@ -142,6 +145,7 @@ def main():
                 dt.append(None)
             
             sma_fast_data.append(sma_fast.update(dt[-1], bid))
+            sma_ff_data.append(sma_ff.update(dt[-1],bid))
             bollinger_data.append(bollinger.update(dt[-1], bid))
                 
             #sma_frequ_data.append(sma_frequ.update(secm, 1))
@@ -159,106 +163,70 @@ def main():
             
             ########################################
             ### Strategy
+            #######################################################
+            # performance [1215, 88, 932]
+            # balance 1800.0 current portfolio []
+            # total actions 2147.0
+            #
+            # winratio 56.5905915231
+            #
+            #######################################################
+            
+            
                         
             try:
                 rate_low = min(rate_slow_data[-100:-1])
             except:
                 rate_low = 0.1
             
-            # begin on rising frequency of ticks
-            if not armed and rate_slow_data[-1] > 3.9 and rate_slow_data[-1] > rate_low*2 and rate_slow_data[-2] <= rate_low*2:
+            # begin outside bollinger 
+            if not armed and (ybid[-1] > bollinger_data[-1][1] or ybid[-1] < bollinger_data[-1][2]):
                 armed = 1
-                maxima = rate_slow_data[-1]
+                esxtrema = sma_ff_data[-1]
                 marker_data.append(((secm),(bid),'c*'))
+                isup = True if ybid[-1] > bollinger_data[-1][0] else False  
                 
             if armed == 1:
-                # crawl on rising until it peaks, 
-                if maxima <= rate_slow_data[-1]:
-                    maxima = rate_slow_data[-1]
-                elif maxima > rate_slow_data[-1]+0.3:
-                    # found peak maxima of tickrate
-                    marker_data.append(((secm),(bid),'c1'))
-                    armed = 2
-                    maxima = 0  # next stage
-                    rsi_val = abs(rsi_avg_data[-1] - 0.5)
-                    
-                #elif rate_slow_data[-1] < 3.9:
-                #    #print "ignore"  
-                #    armed = False
-                #    maxima = 0 
-                    #===========================================================
-                    # if rsi_data[-1] > 0.6:
-                    #     print "sell rsi"
-                    # elif rsi_data[-1] < 0.4:
-                    #     print "buy rsi"     
-                    # else:
-                    #===========================================================
-                    
-                    # TODO: begin on rising frequency of ticks , 
-                    #       crawl on rising until it peaks, 
-                    #           find peak in rsi if peak is in extrema make trade   
-                        
-            
-            if armed == 2:
-                # wait for rsi to become even stronger
-                if abs(rsi_avg_data[-1] - 0.5) < 0.2: # rsi not in interesting range
-                    armed = 0# reset our statemachine because we lost interest in this point
-                    print "too boring ",bid , bollinger_data[1][-1], rsi_avg_data[-1]
-                    marker_data.append(((secm),(bid),'cx'))
-                elif rsi_val <= abs(rsi_avg_data[-1] - 0.5):
-                    rsi_val = abs(rsi_avg_data[-1] - 0.5)
-                else: 
-                    # found less strong rsi avrg val this means counter impuls is beginning
-                    armed = 3
-                    price_val = sma_fast_data[-1]
-                    marker_data.append(((secm),(bid),'c2'))
-                    
-            if armed == 3:
-                # TODO: maybe wait for price to reverse momentum and muve in direction predicted by rsi
-                # eg rsi = 0.2 price should rise soon but it likey falls because of tickpeak width 
-                #    still inducing momentum in same direction  
-                try:  
-                    # maybe we have no sufficient funds  
-                    #    but we still want to be able to draw some graph of this fail
-                    if rsi_avg_data[-1] > 0.5:
-                        # we wait while price is still rising with the momentum (for falling fast avg)
-                        if price_val <= sma_fast_data[-1]:
-                            price_val = sma_fast_data[-1]  # it is still rising 
-                        elif price_val > sma_fast_data[-1]:
-                            print "sell",bid , bollinger_data[1][-1], rsi_avg_data[-1]
+                # crawl on price until momentum turns,
+                if isup:  # find max low 
+                    if esxtrema <= sma_ff_data[-1]:
+                        esxtrema = sma_ff_data[-1]
+                    elif esxtrema > sma_ff_data[-1]:
+                        # found peak maxima of price
+                        if rsi_avg_data[-1] > 0.7:
+                            esxtrema = 0  # next stage
+                            armed = 3
+                            expire = secm+60
+                            print "sell " ,bid , bollinger_data[1][-1], rsi_avg_data[-1]
                             marker_data.append(((secm,secm+60,),(bid,bid),'v-'))
                             feedofcsv.Option(secm,bid,60,accdata, up=False)
+                        else:
+                            #print "rsi not strong enough"
+                            #marker_data.append(((secm),(bid),'kx'))
                             armed = 0
-                        
-                    elif rsi_avg_data[-1] < 0.5: # wait for end of down momentum of price
-                        if price_val >= sma_fast_data[-1]:
-                            price_val = sma_fast_data[-1]  # it is still falling 
-                        elif price_val < sma_fast_data[-1]:
+                            esxtrema = 0
+                            
+                if not isup:
+                    if esxtrema >= sma_ff_data[-1]:
+                        esxtrema = sma_ff_data[-1]
+                    elif esxtrema < sma_ff_data[-1]:   #Todo: make a more sensable stop of interest 
+                        # found peak maxima of price
+                        if rsi_avg_data[-1] < 0.3:
+                            esxtrema = 0  # next stage
+                            armed = 3
+                            expire = secm+60
                             print "buy " ,bid , bollinger_data[1][-1], rsi_avg_data[-1]
                             marker_data.append(((secm,secm+60,),(bid,bid),'^-'))
                             feedofcsv.Option(secm,bid,60,accdata, up=True)  
+                        else:
+                            #print "rsi not strong enough"
+                            #marker_data.append(((secm),(bid),'kx'))
                             armed = 0
-                except Exception as e:
-                    print e.message
-                    break
-              
-                 
-                #===============================================================
-                # #    but we still want to be able to draw some graph of this fail
-                # if bid > bollinger_data[1][-1] or bid < bollinger_data[2][-1]:
-                #     # we have now an out of bollinger price 
-                #     if rsi_avg_data[-1] > 0.75:
-                #         print "sell",bid , bollinger_data[1][-1], rsi_avg_data[-1]
-                #         marker_data.append(((secm,secm+60,),(bid,bid),'v-'))
-                #         
-                #     elif rsi_avg_data[-1] < 0.25:                             
-                #         print "buy " ,bid , bollinger_data[1][-1], rsi_avg_data[-1]
-                #         marker_data.append(((secm,secm+60,),(bid,bid),'^-'))
-                #                                  
-                #===============================================================
-            
-                
-                    
+                            esxtrema = 0
+            if armed == 3:
+                if secm >= expire:
+                    armed = 0
+
             feedofcsv.Option.update(secm,accdata,bid)    
                     
             
@@ -293,6 +261,7 @@ def main():
                     rate_data,
                     rate_slow_data,
                     sma_fast_data,
+                    sma_ff_data,
                     sma_ppsec_data,
                     bollinger_data,
                     marker_data,
@@ -321,35 +290,35 @@ def main():
    
     bmean, bupper, blower = zip(*bollinger_data)
     
-    print marker_data
+    #print marker_data
     
     
     
     
-    rows = 4   
+    rows = 3   
     # price bollinger 
     ax1 = plt.subplot(rows, 1, 1)
     
-    ax1.plot(x, sma_fast_data,'c.', x,ybid,'b.', x, bmean, 'r.')  # sma_fast_data sma_slow_data
+    ax1.plot( x,ybid,'b.', x,sma_ff_data, 'y.', x, sma_fast_data,'c.', x, bmean, 'r.')  # sma_fast_data sma_slow_data
     ax1.fill_between(x[1:], bupper[1:], blower[1:], color='b', alpha=0.2)
     ax1.grid(True)
     for line in marker_data:
         ax1.plot(*line,markersize=10)    
     
     # Tick frequency
-    ax2 = plt.subplot(rows, 1, 2, sharex=ax1)
-    par2 = ax2.twinx()
-    ax2.plot(x,frequ,'b.',)                  # tick frequency
-    par2.plot( x,rate_data,'c.', x, rate_slow_data,'r.',x, wsma_frequ_data, 'g.' )
-    ax2.grid(True)
+    #ax2 = plt.subplot(rows, 1, 2, sharex=ax1)
+    #par2 = ax2.twinx()
+    #ax2.plot(x,frequ,'b.',)                  # tick frequency
+    #par2.plot( x,rate_data,'c.', x, rate_slow_data,'r.')#,x, wsma_frequ_data, 'g.' )
+    #ax2.grid(True)
 
-    ax3 = plt.subplot(rows, 1, 3, sharex=ax1)
+    ax3 = plt.subplot(rows, 1, 2, sharex=ax1)
     par3 = ax3.twinx()
     ax3.plot(x,sma_ppsec_data,'g.')                  # driftspeed
     par3.plot(x, rsi_data,'b.',x, rsi_avg_data, 'c.')
     ax3.grid(True)
     
-    ax4 = plt.subplot(rows, 1, 4, sharex=ax1)
+    ax4 = plt.subplot(rows, 1, 3, sharex=ax1)
     ax4.plot(accdata.histstamps, accdata.histbalance,'ko',accdata.histdebtstamp, accdata.histdebt,'ro')                                   # rsi
     ax4.grid(True)
     
