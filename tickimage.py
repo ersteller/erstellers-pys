@@ -23,6 +23,9 @@ import cPickle
 import feedofcsv
 from numpy import sign
 
+import datetime as datetimemodule
+import matplotlib.dates as md
+
 
 filename="EURUSD-2014-01.csv"
     
@@ -64,7 +67,7 @@ def main():
     pippersec_t_v = []
     
     try:
-        pfile = open("EURUSD p.pickle",'r')
+        pfile = open("EURUSD q.pickle",'r')
         
         (
                     x,
@@ -76,21 +79,22 @@ def main():
                     marker_data,
                     rsi_data,
                     rsi_avg_data,
+                    pippersec_t_v,
                     accdata
         ) = cPickle.load(pfile)
     except Exception as e:
         #raise e #forbid recalculation
-        pfile = open("EURUSDp.pickle",'w')
+        pfile = open("EURUSDq.pickle",'w')
         
         for l in f.readlines():
             cnt += 1
             ##skip until this tick 
-            #if cnt < 1400000:
+            #if cnt < 100000:
             #    if not cnt%1000:
             #        print cnt
             #    continue
             ##stop after this tick 
-            #if cnt >= 1500000:
+            #if cnt >= 110000:
             #    break
 
             #name datetime bid ask
@@ -126,13 +130,13 @@ def main():
             
             if pipperseclaststamp + 1 <= secm:
                 if pipperseclastprice != None:                    
-                    pricediff = sma_fast_data[-1] - pipperseclastprice 
+                    pricediff = bollinger_data[-1][0] - pipperseclastprice 
                     duration = (secm - pipperseclaststamp)
                     if duration != 0:
                         pippersec = pricediff/duration
                         pippersec_t_v.append((secm, pippersec))
                 pipperseclaststamp = secm
-                pipperseclastprice = sma_fast_data[-1]
+                pipperseclastprice = bollinger_data[-1][0]
                 
              
             """
@@ -145,42 +149,47 @@ def main():
             ########################################
             ### Strategy
             #######################################################
-            # performance [611, 35, 443]
-            # balance 1916.0 current portfolio []
-            # total actions 1054.0 
+            # performance [218, 7, 129]
+            # balance 1908.0 current portfolio []
+            # total actions 347.0
             # 
-            # winratio 57.9696394687
+            # winratio 62.8242074928
             # 
             #######################################################
             
-            # begin outside bollinger 
-            if not armed and (ybid[-1] > bollinger_data[-1][1] or ybid[-1] < bollinger_data[-1][2]):
-                armed = 1
-                esxtrema = sma_ff_data[-1]
-                marker_data.append(((secm),(bid),'c*'))
-                isup = True if ybid[-1] > bollinger_data[-1][0] else False  
+            # begin test closing outside bollinger
+            if len(x) > 2 and time.gmtime(x[-2]).tm_min < time.gmtime(x[-1]).tm_min:  # test only on new candle stick
+                if not armed and (ybid[-2] > bollinger_data[-2][1] or ybid[-2] < bollinger_data[-2][2]):
+                    armed = 1
+                    esxtrema = sma_ff_data[-1]
+                    marker_data.append(((datetimemodule.datetime.fromtimestamp(secm)),(bid),'c*'))
+                    isup = True if ybid[-1] > bollinger_data[-1][0] else False  
                 
             if armed == 1:
                 # crawl on price until momentum turns,
-                
                 if isup:  # find max low 
                     if esxtrema <= sma_ff_data[-1]:
                         esxtrema = sma_ff_data[-1]
                     elif esxtrema > sma_ff_data[-1]:
                         # found peak maxima of price
-                        if rsi_avg_data[-1] > 0.74:
+                        if  rsi_avg_data[-1] > 0.74:
                             esxtrema = 0  # next stage
                             armed = 3
                             expire = secm+60
                             print "sell " ,bid , bollinger_data[1][-1], rsi_avg_data[-1]
-                            marker_data.append(((secm,secm+60,),(bid,bid),'v-'))
+                            marker_data.append((
+                                                (
+                                                    datetimemodule.datetime.fromtimestamp(secm),
+                                                    datetimemodule.datetime.fromtimestamp(secm+60),
+                                                 ),
+                                                (bid,bid),
+                                                'v-'))
                             feedofcsv.Option(secm,bid,60,accdata, up=False)
                         else:
                             #print "rsi not strong enough"
                             #marker_data.append(((secm),(bid),'kx'))
                             armed = 0
-                            esxtrema = 0
-                            
+                            esxtrema = 0   
                 if not isup:
                     if esxtrema >= sma_ff_data[-1]:
                         esxtrema = sma_ff_data[-1]
@@ -191,7 +200,12 @@ def main():
                             armed = 3
                             expire = secm+60
                             print "buy " ,bid , bollinger_data[1][-1], rsi_avg_data[-1]
-                            marker_data.append(((secm,secm+60,),(bid,bid),'^-'))
+                            marker_data.append(((
+                                                    datetimemodule.datetime.fromtimestamp(secm),
+                                                    datetimemodule.datetime.fromtimestamp(secm+60),
+                                                 ),
+                                                (bid,bid),
+                                                '^-'))
                             feedofcsv.Option(secm,bid,60,accdata, up=True)  
                         else:
                             #print "rsi not strong enough"
@@ -234,6 +248,7 @@ def main():
                     marker_data,
                     rsi_data,
                     rsi_avg_data,
+                    pippersec_t_v,
                     accdata
                 ), pfile)
     pfile.close()
@@ -241,6 +256,16 @@ def main():
    
    
     bmean, bupper, blower = zip(*bollinger_data)
+    
+    
+    
+    dates = [datetimemodule.datetime.fromtimestamp(ts) for ts in x]
+    plt.subplots_adjust(bottom=0.2)
+    plt.xticks( rotation=25 )
+    ax=plt.gca()
+    xfmt = md.DateFormatter('%Y-%m-%d %H:%M:%S')
+    ax.xaxis.set_major_formatter(xfmt)
+    x = dates
     
     print "plot price"
 
@@ -252,28 +277,28 @@ def main():
     ax1.plot( x,ybid,'b.', x,sma_ff_data, 'y.', x, sma_fast_data,'c.', x, bmean, 'r.')  # sma_fast_data sma_slow_data
     ax1.fill_between(x[1:], bupper[1:], blower[1:], color='b', alpha=0.2)
     ax1.grid(True)
+    
     print "plot strategic markers"
     for line in marker_data:
         ax1.plot(*line,markersize=10)    
-    
     #ax2 = plt.subplot(rows, 1, 2, sharex=ax1)
     #par2 = ax2.twinx()
     #ax2.grid(True)
 
     print "plot rsi"
-    pipt, pipv = zip(*pippersec_t_v)
+    #pipt, pipv = zip(*pippersec_t_v)
     ax3 = plt.subplot(rows, 1, 2, sharex=ax1)
-    par3 = ax3.twinx()
+    #par3 = ax3.twinx()
     ax3.plot(x, rsi_data,'b.',x, rsi_avg_data, 'c.')
-    par3.plot(pipt, pipv, 'g-')
+    #par3.plot(pipt, pipv, 'g-')
     ax3.grid(True)
     
     print "plot balance"
     ax4 = plt.subplot(rows, 1, 3, sharex=ax1)
-    ax4.plot(accdata.histstamps, accdata.histbalance,'ko',accdata.histdebtstamp, accdata.histdebt,'ro')                                   # rsi
+    dths = [datetimemodule.datetime.fromtimestamp(ts) for ts in accdata.histstamps]
+    dthds = [datetimemodule.datetime.fromtimestamp(ts) for ts in accdata.histdebtstamp]
+    ax4.plot(dths, accdata.histbalance,'ko',dthds , accdata.histdebt,'ro')                                   # rsi
     ax4.grid(True)
-    
-    
 
     plt.show()
     
