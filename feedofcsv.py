@@ -200,6 +200,18 @@ class Bollinger(Wmavrg):
             return avrg,avrg+std,avrg-std
         else:
             return (None,None,None)
+        
+class Macd():
+    def __init__(self, _short=200,_long=500):
+        self._short = Wmavrg(_short)
+        self._long = Wmavrg(_long)
+        
+    def update(self,dt,val):
+        sa = self._short.update(dt,val)
+        la = self._long.update(dt,val)
+        if sa == None or la == None:
+            return None,None,None
+        return sa, la, sa - la
 
 class Bunch:
     def __init__(self, **kwds):
@@ -209,7 +221,7 @@ class Option(Bunch):
     allopens={}
     performance=[0,0,0] #win pat loss
     
-    def __init__(self, ts,curprice,duration,accdata,price=20, up=True,revenue=0.8):
+    def __init__(self, ts,curprice,duration,accdata,price=20, up=True,revenue=0.77):
             
         Bunch.__init__(self, ts=ts,curprice=curprice,duration=duration,price=price,up=up,revenue=revenue)
         #check funds
@@ -235,18 +247,21 @@ class Option(Bunch):
                        ):
                     # win
                     accdata.changebalance( opt.price + opt.price * opt.revenue, t)
+                    accdata.histtrade.append((t, opt.price * opt.revenue, opt.up))
                     result.append(opt.price * opt.revenue)
                     cls.performance[0] += 1
                 
                 elif curprice == opt.curprice:
                     # patt
                     accdata.changebalance(opt.price, t)
+                    accdata.histtrade.append((t, 0, opt.up))
                     result.append(0)
                     cls.performance[1] += 1
                 
                 else:
                     #loss
                     result.append(-1*opt.price)
+                    accdata.histtrade.append((t, -opt.price, opt.up))
                     cls.performance[2] += 1
                     pass
                     
@@ -271,6 +286,8 @@ class AccData():
         self.histbalance = []
         self.histdebt = []
         self.histdebtstamp = []
+        self.histtrade = []
+        
     def changebalance(self, diff, t=None):
         if self.balance < - diff:
             raise Exception("crash")          
