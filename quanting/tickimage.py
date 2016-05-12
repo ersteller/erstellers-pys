@@ -52,7 +52,7 @@ def main():
     sma_ff = feedofcsv.Wmavrg(6)
     sma_ff_data = []
 
-    bollinger = feedofcsv.Bollinger(500,2)
+    bollinger = feedofcsv.Bollinger(60*14,2)
     bollinger_data = []
     
     rsi = feedofcsv.RSI()
@@ -104,11 +104,11 @@ def main():
         else:
             dt.append(None)
         
-        sma_fast_data.append(sma_fast.update(dt[-1], bid))
-        sma_ff_data.append(sma_ff.update(dt[-1],bid))
-        bollinger_data.append(bollinger.update(dt[-1], bid))            
+        sma_fast_data.append(sma_fast.update(secm, bid))
+        sma_ff_data.append(sma_ff.update(secm,bid))
+        bollinger_data.append(bollinger.update(secm, bid))            
         rsi_data.append(rsi.update(secm, bid))
-        rsi_avg_data.append(rsi_avg.update(dt[-1], rsi_data[-1]))
+        rsi_avg_data.append(rsi_avg.update(secm, rsi_data[-1]))
         
         
         if pipperseclaststamp + 1 <= secm:
@@ -132,13 +132,12 @@ def main():
         ########################################
         ### Strategy
         #######################################################
-        # performance [218, 7, 129]
-        # balance 1908.0 current portfolio []
-        # total actions 347.0
+        # performance [282, 29, 168]
+        # balance 1982.8 current portfolio []
+        # total actions 450.0
         # 
-        # winratio 62.8242074928
+        # winratio 62.6666666667
         # 
-        #######################################################
         
         # begin test closing outside bollinger
         if len(x) > 2 and time.gmtime(x[-2]).tm_min < time.gmtime(x[-1]).tm_min:  # test only on new candle stick
