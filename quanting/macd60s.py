@@ -40,7 +40,7 @@ def main():
     yask = []
     cnt= 0
     marker_data = []
-    
+    cnt_data = []
     # init strategy variables
     armed = 4   # 4 wait for minimum diff to enable 
     maxima = 0
@@ -49,10 +49,10 @@ def main():
     
     accdata = feedofcsv.AccData(1000)
     
-    sma = feedofcsv.Wmavrg(3*60)
+    sma = feedofcsv.Ema(3*60)
     sma_data = []
     
-    macd = feedofcsv.Macd(9*60,20*60)
+    macd = feedofcsv.Macd(9*60,20*60,feedofcsv.Ema)
     macd_data = []
     
     macd_sma = []
@@ -62,7 +62,7 @@ def main():
     for l in f.readlines():
         cnt += 1
         ##skip until this tick 
-        #if cnt < 10000:
+        #if cnt < 30000:
         #    if not cnt%1000:
         #        print cnt
         #    continue
@@ -82,6 +82,7 @@ def main():
         if not cnt%1000:
             print cnt, datetime
         
+        cnt_data.append(cnt)
  
         x.append(secm)
         ybid.append(bid)
@@ -98,9 +99,9 @@ def main():
         #rsi_data.append(rsi.update(secm, bid))
         #rsi_avg_data.append(rsi_avg.update(dt[-1], rsi_data[-1]))
         
-        macd_data.append(macd.update(dt[-1],bid))
+        macd_data.append(macd.update(secm,bid))
         
-        sma_data.append(sma.update(dt[-1],macd_data[-1][2]))
+        sma_data.append(sma.update(secm,macd_data[-1][2]))
         
         macd_sma.append((macd_data[-1][2],sma_data[-1]))
          
@@ -122,54 +123,80 @@ def main():
         # 
         #######################################################
         
-        try:
-            if len(x) >20:
-                if armed  == 0:
-                    if macd_data[-2][2] > sma_data[-2]: #was rising
-                        if macd_data[-1][2] < sma_data[-1]: # is now falling  --> put
-                            armed = 3
-                            expire = secm+60
-                            print "sell " ,bid
-                            marker_data.append((
-                                                 (
-                                                     datetimemodule.datetime.fromtimestamp(secm),
-                                                     datetimemodule.datetime.fromtimestamp(secm+60),
-                                                  ),
-                                                 (bid,bid),
-                                                 'v-'))
-                            feedofcsv.Option(secm,bid,60,accdata, up=False)
+        #try:
+        if len(x) >20:
+            if armed  == 0 and abs(macd_data[-2][2]):
+                if macd_data[-2][2] > sma_data[-2]: #was rising
+                    if macd_data[-1][2] < sma_data[-1]: # is now falling  --> put
+                        marker_data.append(((datetimemodule.datetime.fromtimestamp(secm)),(bid),'c*'))
+                        armed = 1
                         
-                    if macd_data[-2][2] < sma_data[-2]: #was falling
-                        if macd_data[-1][2] > sma_data[-1]: # is now rising --> call
-                            armed = 3
-                            expire = secm+60
-                            print "buy " ,bid
-                            marker_data.append((
-                                                (
-                                                     datetimemodule.datetime.fromtimestamp(secm),
-                                                     datetimemodule.datetime.fromtimestamp(secm+60),
-                                                  ),
-                                                 (bid,bid),
-                                                 '^-'))
-                            feedofcsv.Option(secm,bid,60,accdata, up=True)  
-                            
-                if armed == 3:
-                    if secm >= expire:
+                if macd_data[-2][2] < sma_data[-2]: #was falling
+                    if macd_data[-1][2] > sma_data[-1]: # is now rising --> call
+                        marker_data.append(((datetimemodule.datetime.fromtimestamp(secm)),(bid),'c*'))
+                        armed = 2
+                        
+            if armed == 1:
+                if time.gmtime(x[-2]).tm_min < time.gmtime(x[-1]).tm_min:  # test on close if direction is as expected
+                    n = len(x) -2
+                    thisopen = None
+                    while time.gmtime(x[n]).tm_min == time.gmtime(x[-2]).tm_min:
+                        thisopen = ybid[n]  # this is the price of the current candle opening
+                        n -= 1
+                    if thisopen != None and bid < thisopen:
+                        # put
+                        armed = 3
+                        expire = secm+60
+                        print "sell " ,bid
+                        marker_data.append((
+                                             (
+                                                 datetimemodule.datetime.fromtimestamp(secm),
+                                                 datetimemodule.datetime.fromtimestamp(secm+60),
+                                              ),
+                                             (bid,bid),
+                                             'v-'))
+                        feedofcsv.Option(secm,bid,60,accdata, up=False)
+                    else: 
                         armed = 4
-                
-                if armed == 4:
-                    diff = macd_data[-1][2] - sma_data[-1]
-                    if abs(diff) > 0.00008:
-                        print "reset"
-                        armed = 0
                         
-                    
-                                
-                             
-            feedofcsv.Option.update(secm,accdata,bid)    
-        except:
-            print "we had a crash"
-            break
+            if armed == 2:
+                if time.gmtime(x[-2]).tm_min < time.gmtime(x[-1]).tm_min:  # test on close if direction is as expected
+                    n = len(x)-2
+                    thisopen = None
+                    while time.gmtime(x[n]).tm_min == time.gmtime(x[-2]).tm_min:
+                        thisopen = ybid[n]  # this is the price of the last candle opening  
+                        n -= 1          
+                    if thisopen != None and bid > thisopen:     
+                        # call
+                        armed = 3
+                        expire = secm+60
+                        print "buy " ,bid
+                        marker_data.append((
+                                            (
+                                                 datetimemodule.datetime.fromtimestamp(secm),
+                                                 datetimemodule.datetime.fromtimestamp(secm+60),
+                                              ),
+                                             (bid,bid),
+                                             '^-'))
+                        feedofcsv.Option(secm,bid,60,accdata, up=True)  
+                    else: 
+                        armed = 4
+                        
+            if armed == 3:
+                if secm >= expire:
+                    marker_data.append(((datetimemodule.datetime.fromtimestamp(secm)),(bid),'kx'))
+                    armed = 4
+            
+            if armed == 4:
+                diff = macd_data[-1][2] - sma_data[-1]
+                if abs(diff) > 0.00008:
+                    marker_data.append(((datetimemodule.datetime.fromtimestamp(secm)),(bid),'co'))
+                    armed = 0
+                      
+        feedofcsv.Option.update(secm,accdata,bid)    
+        #except Exception as e:
+        #    print "we had a crash: ", e
+        #    break
                
         ### end strategy
         ####################################
@@ -202,19 +229,21 @@ def main():
     print "plot price"
 
     
-    rows = 3   
+    rows = 4   
     # price bollinger 
     ax1 = plt.subplot(rows, 1, 1)
     
-    ax1.plot( x,ybid,'b.')  # sma_fast_data sma_slow_data
+    ax1.plot( x,ybid,'b-')  # sma_fast_data sma_slow_data
     ax1.grid(True)
     
     print "plot strategic markers"
     for line in marker_data:
         ax1.plot(*line,markersize=10)    
-    #ax2 = plt.subplot(rows, 1, 2, sharex=ax1)
+    
+    ax2 = plt.subplot(rows, 1, 4, sharex=ax1)
     #par2 = ax2.twinx()
-    #ax2.grid(True)
+    ax2.plot(x, cnt_data ,'b.')
+    ax2.grid(True)
 
     print "plot macd "
     #pipt, pipv = zip(*pippersec_t_v)
