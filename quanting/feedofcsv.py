@@ -12,6 +12,8 @@ import math
 
 from collections import deque
 import numpy as np
+from boto.mturk.price import Price
+from boto.ec2.reservedinstance import PriceSchedule
 
 
 """
@@ -155,26 +157,57 @@ class Wrate(Rate):
                 
         return self.avrg
     
+class Ema():
+    def __init__(self, period):
+        self.period=period
+        self.alpha = 1./period
+        self.avg = None
+        self.lasttime = None
+        self.lastvalue = None
+        
+    def update(self, t, value):
+        if self.avg == None: # first 
+            self.avg = value
+            self.lastvalue = value
+            self.lasttime = t
+            return self.avg
+        dt = t - self.lasttime  # we calculate dt as the time to the next sample
+        self.avg = self.alpha*dt * self.lastvalue + (1-self.alpha*dt)*self.avg
+        self.lasttime = t
+        self.lastvalue = value
+        return self.avg
        
 class Wmavrg(Mavrg):
     def __init__(self, timeframe):
         self.curtimeframe = 0
+        self.lasttime = None
+        self.lastvalue = None
         Mavrg.__init__(self, timeframe)
         
-    def update(self,dt,val):      
-        """ dt should be the time interval for which val is hold
-        """
-        if val == None or math.isnan(val) or dt ==  0 or dt == None:
+    def update(self,t,val):      
+        if t == None or val == None:
+            return None
+        
+        if self.lasttime == None:
+            self.lasttime = t
+            self.lastvalue = val
+            self.avrg = val
+            return None # only update last values on first update
+        
+        # ignore useless samples         
+        dt = t - self.lasttime
+        if val == None or math.isnan(val):
             #print "scip wavrg for ", val, dt
             return self.avrg #nothing changes
+        if t == self.lasttime:
+            self.lastvalue = val # overwrite value of noneduration samples 
+            return self.avrg 
         
-        self.samples.append((dt,val))
-        self.samples_nonone.append(val)
+        self.samples.append((dt,self.lastvalue))
+        self.samples_nonone.append(self.lastvalue)
         
         #update timeframe add sample
-        if  self.avrg == None:
-            self.avrg = 0
-        self.avrg = (self.avrg * self.curtimeframe + val * dt ) / (self.curtimeframe + dt)
+        self.avrg = (self.avrg * self.curtimeframe + self.lastvalue * dt ) / (self.curtimeframe + dt)
         self.curtimeframe += dt       
         
         # check limits of timeframe 
@@ -185,16 +218,19 @@ class Wmavrg(Mavrg):
             # remove popped from timeframe and average
             self.avrg =  (self.avrg * self.curtimeframe - pv * pdt) / (self.curtimeframe - pdt)
             self.curtimeframe -= pdt 
+        
+        self.lasttime = t
+        self.lastvalue = val 
         return self.avrg
     
     
-class Bollinger(Wmavrg):
+class Bollinger(Ema):
     def __init__(self, timeframe=24*3600*20, k=2):
-        Wmavrg.__init__(self,timeframe)
+        Ema.__init__(self,timeframe)
         self.k = k
         
-    def update(self,dt,val):
-        avrg = Wmavrg.update(self,dt,val)
+    def update(self,t,val):
+        avrg = Ema.update(self,t,val)
         std = pylab.std(self.samples_nonone)*self.k # this takes long
         if avrg != None:
             return avrg,avrg+std,avrg-std
@@ -202,13 +238,13 @@ class Bollinger(Wmavrg):
             return (None,None,None)
         
 class Macd():
-    def __init__(self, _short=200,_long=500):
-        self._short = Wmavrg(_short)
-        self._long = Wmavrg(_long)
+    def __init__(self, _short=200,_long=500, avgtype=Ema):
+        self._short = avgtype(_short)
+        self._long = avgtype(_long)
         
-    def update(self,dt,val):
-        sa = self._short.update(dt,val)
-        la = self._long.update(dt,val)
+    def update(self,t,val):
+        sa = self._short.update(t,val)
+        la = self._long.update(t,val)
         if sa == None or la == None:
             return None,None,None
         return sa, la, sa - la
