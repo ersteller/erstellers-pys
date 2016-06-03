@@ -12,9 +12,6 @@ import math
 
 from collections import deque
 import numpy as np
-from boto.mturk.price import Price
-from boto.ec2.reservedinstance import PriceSchedule
-
 
 """
 avrg = (X*Wx+Y*Wy)/(Wx+Wy)
@@ -158,9 +155,9 @@ class Wrate(Rate):
         return self.avrg
     
 class Ema():
-    def __init__(self, period):
-        self.period=period
-        self.alpha = 1./period
+    def __init__(self, timeframe):
+        self.timeframe=timeframe
+        self.alpha = 1./timeframe *2
         self.avg = None
         self.lasttime = None
         self.lastvalue = None
@@ -227,10 +224,45 @@ class Wmavrg(Mavrg):
 class Bollinger(Ema):
     def __init__(self, timeframe=24*3600*20, k=2):
         Ema.__init__(self,timeframe)
+        self.variance = 0
+        self.stddev = math.sqrt(self.variance)
         self.k = k
+        self.__samples = []#
+        self.__samples_nonone = []
         
     def update(self,t,val):
+        oldavg = self.avg
         avrg = Ema.update(self,t,val)
+        
+        self.__samples.append((t,self.lastvalue))
+        self.__samples_nonone.append(self.lastvalue)
+        
+        if oldavg == None:
+            self.first_t = t 
+            return (None,None,None)
+        newavg = avrg
+        
+        # check limits of timeframe 
+        while t - self.__samples[0][0] > self.timeframe and len(self.__samples) > 2:
+            _, pv = self.__samples.pop(0)
+            del self.__samples_nonone[0]
+            #self.variance += (val-pv)*(val-newavg+pv-oldavg)/(self.timeframe) # this seems to use constant number of samples
+            #std = math.sqrt(self.variance)
+            
+        std = pylab.std(self.__samples_nonone)*self.k # this takes long
+        
+        if avrg != None:
+            return avrg,avrg+std,avrg-std
+        else:
+            return (None,None,None)
+        
+class BollingerW(Wmavrg):
+    def __init__(self, timeframe=24*3600*20, k=2):
+        Wmavrg.__init__(self,timeframe)
+        self.k = k
+        
+    def update(self,dt,val):
+        avrg = Wmavrg.update(self,dt,val)
         std = pylab.std(self.samples_nonone)*self.k # this takes long
         if avrg != None:
             return avrg,avrg+std,avrg-std
