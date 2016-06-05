@@ -11,6 +11,21 @@ except:
     raise Exception('Module pywinauto required. \nYou need pywinauto > v0.4  maybe update pywinauto. \n    "python -m pip install -U pywinauto"')
 import time
 
+def buyoption(window, up=True, price=None, duration_pos=None):
+    if price != None:
+        window.BinaryOptionsTrading.ClickInput(coords=(960,240))
+        window.BinaryOptionsTrading.TypeKeys('{HOME}{TAB}')
+        window.BinaryOptionsTrading.ClickInput(coords=(960,240)) # enter price here 
+        window.BinaryOptionsTrading.TypeKeys('^a'+str(int(price))+'{TAB}')
+    if duration_pos != None:
+        window.BinaryOptionsTrading.ClickInput(coords=(800,240))  # duration   
+        window.BinaryOptionsTrading.TypeKeys('{HOME}'+'{DOWN}'*duration_pos+'{TAB}')           
+    if up == True:
+        window.BinaryOptionsTrading.ClickInput(coords=(960,380)) # up 
+    if up == False:
+        window.BinaryOptionsTrading.ClickInput(coords=(960,480)) # down
+    pass
+
 def openBinaryoptionsDemoInChrome():
     app= application.Application()
     window = app.start_("I:\Program Files (x86)\Google\Chrome\Application\chrome.exe /new-window /window-position=10,10 /window-size=1200,720 https://www.binaryoptionsdemo.com/en/trading/")
@@ -60,8 +75,11 @@ def getcurrtimepricebalancedemo(window):
 
 if __name__== "__main__":
     window = openBinaryoptionsDemoInChrome()
-    breaktime = time.time() + 3
     ts0,price0,balance0 = getcurrtimepricebalancedemo(window)
+        
+    buyoption(window, price=5, duration_pos=1)
+    
+    breaktime = time.time() + 3
     while time.time() < breaktime:
         ts,price,balance = getcurrtimepricebalancedemo(window)
         print ts,price,balance
