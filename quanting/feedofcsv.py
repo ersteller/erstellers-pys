@@ -182,7 +182,7 @@ class Wmavrg(Mavrg):
         Mavrg.__init__(self, timeframe)
         
     def update(self,t,val):      
-        if t == None or val == None:
+        if t == None or val == None or math.isnan(val):
             return None
         
         if self.lasttime == None:
