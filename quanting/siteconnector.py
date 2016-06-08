@@ -11,7 +11,7 @@ except:
     raise Exception('Module pywinauto required. \nYou need pywinauto > v0.4  maybe update pywinauto. \n    "python -m pip install -U pywinauto"')
 import time
 
-def buyoption(window, up=True, price=None, duration_pos=None):
+def buyoption(window, up=None, price=None, duration_pos=None):
     if price != None:
         window.BinaryOptionsTrading.ClickInput(coords=(960,240))
         window.BinaryOptionsTrading.TypeKeys('{HOME}{TAB}')
@@ -19,16 +19,22 @@ def buyoption(window, up=True, price=None, duration_pos=None):
         window.BinaryOptionsTrading.TypeKeys('^a'+str(int(price))+'{TAB}')
     if duration_pos != None:
         window.BinaryOptionsTrading.ClickInput(coords=(800,240))  # duration   
-        window.BinaryOptionsTrading.TypeKeys('{HOME}'+'{DOWN}'*duration_pos+'{TAB}')           
+        window.BinaryOptionsTrading.TypeKeys('{HOME}'+'{DOWN}'*duration_pos+'{TAB}')     
+             
     if up == True:
         window.BinaryOptionsTrading.ClickInput(coords=(960,380)) # up 
-    if up == False:
+    elif up == False:
         window.BinaryOptionsTrading.ClickInput(coords=(960,480)) # down
+    if up != None:
+        time.sleep(2)
+        window.BinaryOptionsTrading.ClickInput(coords=(960,310)) # return to trade
+        time.sleep(3.5)
+        window.BinaryOptionsTrading.ClickInput(coords=(460,360)) # 5 minuts view
     pass
 
 def openBinaryoptionsDemoInChrome():
     app= application.Application()
-    window = app.start_("I:\Program Files (x86)\Google\Chrome\Application\chrome.exe /new-window /window-position=10,10 /window-size=1200,720 https://www.binaryoptionsdemo.com/en/trading/")
+    window = app.start_("I:\Program Files (x86)\Google\Chrome\Application\chrome.exe /new-window /window-position=10,10 /window-size=1200,1020 https://www.binaryoptionsdemo.com/en/trading/")
     time.sleep(6)
     print "rdy"
     return window
